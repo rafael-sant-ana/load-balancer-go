@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var src_page = "https://pudim.com.br"
+var src_page = "https://pokeapi.co/api/v2"
 
 func proxy(w http.ResponseWriter, req *http.Request) {
 	route := req.PathValue("path")

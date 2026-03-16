@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-var hostname = "www.google.com"
+var hostname = "pudim.com.br"
 
 func proxy(w http.ResponseWriter, req *http.Request) {
 	var resp *http.Response

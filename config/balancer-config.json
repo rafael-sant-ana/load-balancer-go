@@ -1,0 +1,14 @@
+[
+    {
+        "url": "http://localhost:3333",
+        "healthcheck": "/healthcheck"
+    },
+    {
+        "url": "http://localhost:3334",
+        "healthcheck": "/healthcheck"
+    },
+    {
+        "url": "http://localhost:3335",
+        "healthcheck": "/healthcheck"
+    }
+]

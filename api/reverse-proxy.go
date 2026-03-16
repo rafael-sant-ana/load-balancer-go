@@ -1,12 +1,16 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 )
 
-func hello(w http.ResponseWriter, req *http.Request) {
+var src_page = "https://pudim.com.br"
+
+func proxy(w http.ResponseWriter, req *http.Request) {
+	route := req.PathValue("path")
 	for name, headers := range req.Header {
 		for _, h := range headers {
 			req.Header.Set(name, h)
@@ -16,15 +20,24 @@ func hello(w http.ResponseWriter, req *http.Request) {
 	var resp *http.Response
 	var err error
 
+	fullpath := strings.Join([]string{src_page, route}, "/")
+
+	fmt.Println(fullpath)
 	switch req.Method { // depois tem que deixar dinamico pra custom methods
 	case "GET":
-		resp, err = http.Get("https://google.com.br")
+		resp, err = http.Get(fullpath)
+
+		if err != nil {
+			fmt.Println(err)
+			// retornar na response
+		}
+
+	case "POST":
+		resp, err = http.Post(fullpath, req.Header.Get("Content-Type"), req.Body)
 
 		if err != nil {
 			fmt.Println(err)
 		}
-
-	case "POST":
 
 	case "DELETE":
 
@@ -40,19 +53,16 @@ func hello(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	response_text := ""
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		fmt.Println(scanner.Text())
-		response_text += scanner.Text()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		// msg
 	}
 
-	w.Write([]byte(response_text))
+	w.Write(body)
 }
 
 func main() {
-	http.HandleFunc("/hello", hello)
-	// http.HandleFunc("")
+	http.HandleFunc("/{path...}", proxy)
 
 	fmt.Printf("Server is running\n")
 	http.ListenAndServe(":8090", nil)

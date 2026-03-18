@@ -1,4 +1,4 @@
-package main
+package balancer
 
 import (
 	"encoding/json"
@@ -7,28 +7,15 @@ import (
 	"sync"
 
 	config "github.com/rafael-sant-ana/load-balancer-go/config"
+	Types "github.com/rafael-sant-ana/load-balancer-go/types"
 )
 
-// * Sujeito a variações, revisar depois
-type healthCheckReponse struct {
-	Counter int    `json:"counter"`
-	Memory  string `json:"memory_info"`
-	CPU     string `json:"cpu_usage"`
-}
-
-type GlobalServersInfo struct {
-	Total_requests int
-	ServerList     []*config.ServerInfo
-	BestServer     *config.ServerInfo
-	WorstServer    *config.ServerInfo
-}
-
-func updateServersStatus(serverList []*config.ServerInfo) {
+func updateServersStatus(serverList []*Types.ServerInfo) {
 	var wg sync.WaitGroup
 
 	for _, server := range serverList {
 		wg.Add(1)
-		go func(s *config.ServerInfo) {
+		go func(s *Types.ServerInfo) {
 			defer wg.Done()
 			serverUrl := server.Info.Url
 			healthEndPoint := server.Info.Healthcheck
@@ -49,7 +36,7 @@ func updateServersStatus(serverList []*config.ServerInfo) {
 			decoder := json.NewDecoder(resp.Body)
 			decoder.DisallowUnknownFields()
 
-			var r healthCheckReponse
+			var r Types.HealthCheckReponse
 
 			e := decoder.Decode(&r)
 			if e != nil {
@@ -62,20 +49,29 @@ func updateServersStatus(serverList []*config.ServerInfo) {
 				return
 			}
 			if r.Counter > 0 {
-				server.Status = config.Busy
+				server.Status = Types.Busy
 				return
 			}
 
-			server.Status = config.Available
+			server.Status = Types.Available
 
 		}(server)
 	}
 	wg.Wait()
 }
 
-func SetupServers() *GlobalServersInfo {
+func SetupServers() *Types.GlobalServersInfo {
 	servers := config.MakeServerList("config/balancer-config.json")
-	serversInfo := GlobalServersInfo{0, servers, nil, nil}
+	if servers == nil {
+		panic("Erro ao criar a lista de servidores!")
+	}
+	serversInfo := Types.GlobalServersInfo{
+		Total_requests: 0,
+		ServerList:     servers,
+		BestServer:     servers[0],
+		WorstServer:    servers[0],
+	}
+
 	updateServersStatus(servers)
 	for _, server := range servers {
 		fmt.Printf("%s ServerStatus: %s\n", server.Info.Url, server.Status)
@@ -83,8 +79,14 @@ func SetupServers() *GlobalServersInfo {
 	return &serversInfo
 }
 
-func ProcessRequest() *http.Response {
-	return nil
+func EnqueueRequest() {}
+
+func ProcessRequest(originalRequest *http.Request, list *Types.GlobalServersInfo) *http.Response {
+	returnChannel := make(chan Types.RequestEvent)
+
+	result := <-returnChannel
+	fmt.Println(result.ProcessedBy)
+	return result.Response
 }
 
 func main() {

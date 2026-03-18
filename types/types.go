@@ -1,6 +1,8 @@
 package types
 
-import "net/http"
+import (
+	"net/http"
+)
 
 // "Enum" que armazena o status do server
 type ServerStatus int
@@ -23,6 +25,7 @@ type ServerInfo struct {
 	Queue     []*RequestEvent // Fila de Requests TODO: Arrumar o tipo depois
 	Status    ServerStatus
 	QueueSize int
+	Channel   *chan RequestEvent
 }
 
 var ServerStatusName = map[ServerStatus]string{
@@ -45,11 +48,15 @@ type HealthCheckReponse struct {
 type GlobalServersInfo struct {
 	Total_requests int
 	ServerList     []*ServerInfo
-	BestServer     *ServerInfo
-	WorstServer    *ServerInfo
+	Heap           ServerHeap
 }
 
 type RequestEvent struct {
+	// Request http.Request
+	Message string
+}
+
+type ResponseEvent struct {
 	Response    *http.Response
 	ProcessedBy string
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	balancer "github.com/rafael-sant-ana/load-balancer-go/balancer"
+	"github.com/rafael-sant-ana/load-balancer-go/types"
 )
 
 func main() {
@@ -12,7 +13,9 @@ func main() {
 	infos := balancer.ServerList
 
 	for _, server := range infos.ServerList {
-		fmt.Println(server)
+		if server.Status != types.Offline {
+			fmt.Println(server)
+		}
 	}
 
 	// exemplo de listener de requests
@@ -27,7 +30,13 @@ func main() {
 	// fmt.Println(server.Info.Url + " : " + server.Status.String())
 	// fmt.Println(server)
 	// }
-	handler := http.HandlerFunc(balancer.MakeRequest)
+
+	http.HandleFunc("/", balancer.MakeRequest)
+	http.HandleFunc("/check", balancer.CheckServers)
 	fmt.Printf("Server is running\n")
-	http.ListenAndServe(":8090", handler)
+
+	go balancer.ListenQueues()
+
+	http.ListenAndServe(":8090", nil)
+
 }

@@ -22,10 +22,9 @@ type ServerUrls struct {
 // Teremos uma lista (ou um minheap ordenado pelo tamanho da fila de requests) de Servers com serverinfos
 type ServerInfo struct {
 	Info      ServerUrls
-	Queue     []*RequestEvent // Fila de Requests TODO: Arrumar o tipo depois
+	Queue     RequestQueue // Fila de Requests TODO: Arrumar o tipo depois
 	Status    ServerStatus
 	QueueSize int
-	Channel   *chan RequestEvent
 }
 
 var ServerStatusName = map[ServerStatus]string{
@@ -49,11 +48,12 @@ type GlobalServersInfo struct {
 	Total_requests int
 	ServerList     []*ServerInfo
 	Heap           ServerHeap
+	MaxHeap        ServerMaxHeap
 }
 
 type RequestEvent struct {
-	// Request http.Request
-	Message string
+	Request         *http.Request
+	ResponseChannel chan *ResponseEvent
 }
 
 type ResponseEvent struct {

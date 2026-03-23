@@ -1,6 +1,7 @@
 package balancer
 
 import (
+	"container/heap"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	config "github.com/rafael-sant-ana/load-balancer-go/config"
+	"github.com/rafael-sant-ana/load-balancer-go/types"
 	Types "github.com/rafael-sant-ana/load-balancer-go/types"
 )
 
@@ -69,12 +71,19 @@ func SetupServers() *Types.GlobalServersInfo {
 	serversInfo := Types.GlobalServersInfo{
 		Total_requests: 0,
 		ServerList:     servers,
-		Heap:           []*Types.ServerInfo{},
+		Heap:           Types.ServerHeap{},
+		MaxHeap:        Types.ServerMaxHeap{},
 	}
 	updateServersStatus(servers)
 
+	heap.Init(&serversInfo.Heap)
+	heap.Init(&serversInfo.MaxHeap)
+
 	for _, server := range servers {
-		serversInfo.Heap.Push(server)
+		h := &serversInfo.Heap
+		mh := &serversInfo.MaxHeap
+		heap.Push(h, server)
+		heap.Push(mh, server)
 	}
 	return &serversInfo
 }
@@ -85,38 +94,119 @@ func init() {
 	ServerList = SetupServers()
 }
 
-func SendRequest(req *http.Request, list *Types.GlobalServersInfo, ResponseChannel chan Types.ResponseEvent) {
-	// Aqui ao inves de pegar o "bestServer" vou pegar o root do minHeap, atualizar ele e devolver pro mesmo
-	server := list.Heap.Pop()
+func ProcessRequest(s *Types.ServerInfo, r *types.RequestEvent) {
+	s.Status = Types.Busy
+
+	// Lógica de processamento aqui simulada por um sleep
+	time.Sleep(10 * time.Second)
+
+	//fim
+	r.ResponseChannel <- &types.ResponseEvent{Response: nil, ProcessedBy: s.Info.Url}
+	s.QueueSize--
+	ServerList.Total_requests--
+
+	// Continua processando a fila ou rouba de outro server
+	if s.Queue.Top() != nil {
+		new_r, err := s.Queue.Dequeue()
+		if err != nil {
+			panic(err)
+		}
+		ProcessRequest(s, new_r)
+		return
+	}
+	s.Status = types.Available
+
+	// TODO: Debugar race condition pra habilitar steal task de forma segura
+	// if ServerList.MaxHeap.Top().QueueSize != 0 {
+	// 	fmt.Println("Roubei!")
+	// 	old_s := heap.Pop(&ServerList.MaxHeap).(*types.ServerInfo)
+	// 	r, err := old_s.Queue.Dequeue()
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	ProcessRequest(s, r)
+	// }
+}
+
+func EnqueueRequest(req *http.Request, list *Types.GlobalServersInfo, rChannel chan *Types.ResponseEvent) {
+	server := heap.Pop(&list.Heap).(*Types.ServerInfo)
 	if server == nil {
 		panic("No server available on the list")
 	}
-	fmt.Println("Received request to " + server.Info.Url)
-	fmt.Println(&ResponseChannel)
 
-	// TODO: Criar uma funcao pra processar o request e retornar no fim.
-	// ? Talvez cada server com um listener da respectiva fila? Mandar sempre o request junto com um channel pra response!
+	reqEvent := types.RequestEvent{Request: req, ResponseChannel: rChannel}
+	server.Queue.Enqueue(&reqEvent)
 
-	server.QueueSize++
-	list.Heap.Push(server)
+	server.QueueSize += 1
+	ServerList.Total_requests++
 
-	time.Sleep(3 * time.Second)
-	ResponseChannel <- Types.ResponseEvent{ProcessedBy: server.Info.Url}
+	// TODO: Ajustar a lógica de work steal evitando race conditions
+	h := &list.Heap
+	// mh := &list.MaxHeap
+	// heap.Fix(mh, len(*mh)-1)
+	heap.Push(h, server)
 
-	server.QueueSize--
+}
+
+// Request que retorna como está a lista de request e os servidores
+func CheckServers(w http.ResponseWriter, req *http.Request) {
+	serversStauts := []Types.CheckServer{}
+
+	for _, server := range ServerList.ServerList {
+		info := Types.CheckServer{Status: server.Status.String(), InQueue: server.QueueSize, URL: server.Info.Url}
+		serversStauts = append(serversStauts, info)
+	}
+
+	r := Types.CheckResponse{
+		RequestsQueueSize: ServerList.Total_requests,
+		Servers:           serversStauts,
+	}
+
+	resp, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	w.Write(resp)
 }
 
 func MakeRequest(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Request recebido!")
 	fmt.Println(req.Method, req.URL.Path)
+
 	// Passar o request pra frente usando o mesmo endpoint porém no servidor disponível.
 	// Por enquanto cada request vai simular um request qualquer de 20s nos servers de teste
-	ResponseChannel := make(chan Types.ResponseEvent)
-	go SendRequest(req, ServerList, ResponseChannel)
+	ResponseChannel := make(chan *Types.ResponseEvent)
+	go EnqueueRequest(req, ServerList, ResponseChannel)
 
 	response := <-ResponseChannel
-	fmt.Print("Resposta: ")
-	fmt.Println(response)
-	// Escreve a response
-	fmt.Fprintf(w, "Request processed by %s", response.ProcessedBy)
+
+	// TODO: Fazer o reverse proxy aqui
+	fmt.Fprintf(w, "%s", response.ProcessedBy)
+}
+
+func ListenQueues() {
+	for _, server := range ServerList.ServerList {
+		s := server
+		go func() {
+			for event := range s.Queue.TopChanged {
+				if event == nil {
+					continue
+				}
+				if s.Status == types.Offline {
+					// TODO: Lançar um 404 e tentar atualizar os servers dnv sempre
+					// * Caso tenha ao menos 1 server online nunca chegaremos aqui
+					event.ResponseChannel <- &types.ResponseEvent{Response: nil, ProcessedBy: "OFFLINE"}
+					continue
+				}
+				if s.Status != types.Available {
+					continue
+				}
+				r, err := s.Queue.Dequeue()
+				if err != nil {
+					panic(err)
+				}
+				ProcessRequest(s, r)
+			}
+		}()
+	}
 }

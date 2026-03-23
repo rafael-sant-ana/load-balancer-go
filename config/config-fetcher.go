@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/rafael-sant-ana/load-balancer-go/types"
 	Types "github.com/rafael-sant-ana/load-balancer-go/types"
 )
 
@@ -29,7 +30,7 @@ func MakeServerList(cfg_file string) []*Types.ServerInfo {
 	for _, url := range urls {
 		server := Types.ServerInfo{
 			Info:      url,
-			Queue:     []*Types.RequestEvent{},
+			Queue:     *types.NewRequestQueue(),
 			Status:    Types.Offline,
 			QueueSize: 0,
 		}

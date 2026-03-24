@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
-	"time"
 
 	config "github.com/rafael-sant-ana/load-balancer-go/config"
 	"github.com/rafael-sant-ana/load-balancer-go/types"
@@ -97,11 +96,11 @@ func init() {
 func ProcessRequest(s *Types.ServerInfo, r *types.RequestEvent) {
 	s.Status = Types.Busy
 
-	// Lógica de processamento aqui simulada por um sleep
-	time.Sleep(10 * time.Second)
+	reverseProxy := Types.ReverseProxy{Server: s}
 
+	resp := reverseProxy.SendRequest(r.Request)
 	//fim
-	r.ResponseChannel <- &types.ResponseEvent{Response: nil, ProcessedBy: s.Info.Url}
+	r.ResponseChannel <- &types.ResponseEvent{Response: resp, ProcessedBy: s.Info.Url}
 	s.QueueSize--
 	ServerList.Total_requests--
 

@@ -1,5 +1,5 @@
 Coisas a implementar
-- [ ] API em go
+- [X] API em go
     - [X] proxy reverso
         quando envia pra (proxy /teste/teste2 => servidor /teste/teste2)
         inicialmente bate em qualquer endpoint que receber
@@ -11,5 +11,4 @@ Coisas a implementar
 - [ ] algoritmo pra reveza as requests (natan)
     -- escalonar pra mandar 1x pra cada servidor
     -- goroutine
-
-- [ ] 
+- [ ] Timer pra mandar Ping pra saber quais servidores ficaram ativos e quais ficaram offline
